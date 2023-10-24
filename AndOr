@@ -1,0 +1,32 @@
+import numpy as np
+
+# Функция задержки сигнала
+def delay(x, dt):
+    x = np.roll(x, dt)
+    x[:dt] = 0
+    return x
+
+# Операция венюнкция
+def seq(x, y, dt):
+    # Таблица истинности
+    A = [[0, 0],[0, 1]]
+
+    # Задержка сигналов
+    x_dt = delay(x, dt)
+    y_dt = delay(y, dt)
+
+    # Вычисление выхода
+    result = np.zeros_like(x)
+
+    for i in range(len(x)):
+        result[i] = A[x_dt[i], y_dt[i]]
+
+    if np.all(result == 1):
+        print("x & y = 1")
+    else:
+        print("x & y != 1")
+
+    return result
+
+# Пример использования
+print(seq(np.array([1, 1, 1, 0, 1, 0]), np.array([0, 0, 1, 1, 1, 0]), 1))
