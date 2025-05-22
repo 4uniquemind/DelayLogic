@@ -102,8 +102,7 @@ for plateau_val, label in rational_plateaus.items():
          text_x = omega_values[indices[0]] + (omega_values[indices[-1]] - omega_values[indices[0]]) / 2
          plt.text(text_x, plateau_val + 0.01, label, horizontalalignment='center', color='red')
 
-
-plt.show()
+plt.savefig("devils_staircase.png")
 
 
 # -------------------------------------------
@@ -125,7 +124,7 @@ def plot_dynamics(Omega, K, num_iterations=100, title_suffix=""):
     plt.title(f"Динамика Фазы: $\Omega={Omega:.3f}, K={K}$ (W ≈ {wn:.3f}) {title_suffix}")
     plt.ylim(0, 1)
     plt.grid(True, linestyle=':', alpha=0.7)
-    plt.show()
+    plt.savefig(f"dynamics_Omega_{Omega:.3f}_K_{K}.png")
 
 # Примеры для разных режимов
 print("\nВизуализация динамики для разных Omega:")

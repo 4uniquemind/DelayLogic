@@ -1,16 +1,112 @@
 import numpy as np
 
+# Constants for the time-based AND gate
+K_PARAM = 1.0
+OMEGA_MAP = {
+    (0,0): 0.1,
+    (0,1): 0.2,
+    (1,0): 0.25,
+    (1,1): 0.5
+}
+THRESHOLD_WN = 0.4
+
+# Copied from Stairs.py
+def circle_map_step(theta_current, Omega, K):
+    """Один шаг итерации круговой карты."""
+    theta_next = theta_current + Omega + (K / (2 * np.pi)) * np.sin(2 * np.pi * theta_current)
+    return theta_next % 1 # Возвращаем остаток от деления на 1, чтобы фаза была [0, 1)
+
+# Copied and modified from Stairs.py
+def calculate_winding_number(Omega, K, num_iterations=200, transient=50):
+    """Вычисляет число вращения для заданных Omega и K."""
+    theta = 0.5 # Начальная фаза
+    total_phase_change = 0.0
+    # theta_unwrapped = theta # Фаза без взятия по модулю 1, для отслеживания полных оборотов
+
+    # Пропускаем переходный процесс
+    for _ in range(transient):
+        theta_next_raw = theta + Omega + (K / (2 * np.pi)) * np.sin(2 * np.pi * theta)
+        theta = theta_next_raw % 1
+
+    # Вычисляем число вращения на установившемся режиме
+    # theta_unwrapped = theta # Сбрасываем после транзиента
+    for _ in range(num_iterations - transient):
+        theta_next_raw = theta + Omega + (K / (2 * np.pi)) * np.sin(2 * np.pi * theta)
+        total_phase_change += theta_next_raw - theta # Насколько фаза изменилась *до* взятия по модулю
+        theta = theta_next_raw % 1
+    
+    if (num_iterations - transient) == 0:
+        return 0 # Avoid division by zero if num_iterations <= transient
+    winding_number = total_phase_change / (num_iterations - transient)
+    return winding_number
+
+# Test function for the logical gate
+def test_logical_gate():
+    print("\\nRunning time_based_and_gate tests...")
+    # Define parameters locally for the test, mirroring the global ones or using specific test values
+    K_param_test = 1.0
+    omega_map_test = {
+        (0,0): 0.1, # Expected WN < 0.4 -> 0
+        (0,1): 0.2, # Expected WN < 0.4 -> 0
+        (1,0): 0.25, # Expected WN < 0.4 -> 0
+        (1,1): 0.5  # Expected WN > 0.4 -> 1
+    }
+    threshold_wn_test = 0.4
+    
+    passed_all_tests = True
+
+    # Test case 1: (0,0) -> 0
+    result_00 = time_based_and_gate(0, 0, K_param_test, omega_map_test, threshold_wn_test)
+    print(f"Testing time_based_and_gate(0,0)... Expected: 0, Got: {result_00}")
+    assert result_00 == 0, f"Test failed for (0,0): Expected 0, Got {result_00}"
+    if result_00 != 0: passed_all_tests = False
+
+    # Test case 2: (0,1) -> 0
+    result_01 = time_based_and_gate(0, 1, K_param_test, omega_map_test, threshold_wn_test)
+    print(f"Testing time_based_and_gate(0,1)... Expected: 0, Got: {result_01}")
+    assert result_01 == 0, f"Test failed for (0,1): Expected 0, Got {result_01}"
+    if result_01 != 0: passed_all_tests = False
+
+    # Test case 3: (1,0) -> 0
+    result_10 = time_based_and_gate(1, 0, K_param_test, omega_map_test, threshold_wn_test)
+    print(f"Testing time_based_and_gate(1,0)... Expected: 0, Got: {result_10}")
+    assert result_10 == 0, f"Test failed for (1,0): Expected 0, Got {result_10}"
+    if result_10 != 0: passed_all_tests = False
+
+    # Test case 4: (1,1) -> 1
+    result_11 = time_based_and_gate(1, 1, K_param_test, omega_map_test, threshold_wn_test)
+    print(f"Testing time_based_and_gate(1,1)... Expected: 1, Got: {result_11}")
+    assert result_11 == 1, f"Test failed for (1,1): Expected 1, Got {result_11}"
+    if result_11 != 1: passed_all_tests = False
+
+    if passed_all_tests:
+        print("All logic gate tests passed!")
+    else:
+        print("Some logic gate tests FAILED.")
+
+# New time-based AND gate function
+def time_based_and_gate(input1, input2, K_param, omega_map, threshold_wn):
+    Omega = omega_map.get((input1, input2))
+    if Omega is None:
+        # Fallback or error for undefined input combinations
+        # For now, let's assume it results in a 0 output if not found
+        return 0
+    
+    winding_number = calculate_winding_number(Omega, K_param)
+    
+    if winding_number >= threshold_wn:
+        return 1
+    else:
+        return 0
+
 # Функция задержки сигнала
 def delay(x, dt):
     x = np.roll(x, dt)
     x[:dt] = 0
     return x
 
-# Операция венюнкция
+# Модифицированная операция венюнкция (sequential AND)
 def seq(x, y, dt):
-    # Таблица истинности
-    A = [[0, 0],[0, 1]]
-
     # Задержка сигналов
     x_dt = delay(x, dt)
     y_dt = delay(y, dt)
@@ -19,14 +115,21 @@ def seq(x, y, dt):
     result = np.zeros_like(x)
 
     for i in range(len(x)):
-        result[i] = A[x_dt[i], y_dt[i]]
+        result[i] = time_based_and_gate(x_dt[i], y_dt[i], K_PARAM, OMEGA_MAP, THRESHOLD_WN)
 
+    # This part of the original code printed a summary, 
+    # which might not be directly relevant for each call to seq if it's used as a component.
+    # For now, let's keep it to see the overall effect on the example.
     if np.all(result == 1):
-        print("x & y = 1")
+        print("x & y = 1 (based on time_based_and_gate for the entire sequence)")
     else:
-        print("x & y != 1")
+        # This will print if any element in the result is 0
+        print("x & y != 1 (at least one element is 0 in the time_based_and_gate sequence)")
 
     return result
 
 # Пример использования
 print(seq(np.array([1, 1, 1, 0, 1, 0]), np.array([0, 0, 1, 1, 1, 0]), 1))
+
+# Run tests
+test_logical_gate()
