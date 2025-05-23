@@ -1,24 +1,74 @@
 import numpy as np
 
-# Constants for the time-based AND gate
+# --- Parameters for Time-Based Logic Gate ---
+
+# K_PARAM: Coupling strength for the circle map.
+# Chosen as 1.0, a common value for observing rich dynamics including frequency locking
+# in the circle map, as seen in "Devil's Staircase" phenomena.
 K_PARAM = 1.0
+
+# OMEGA_MAP: Maps (input1, input2) pairs to Omega parameters for the circle map.
+# Omega is the base frequency parameter. These values are chosen empirically
+# to ensure that the resulting winding numbers for (1,1) inputs are distinctly
+# higher than for other input combinations, relative to THRESHOLD_WN.
+# (0,0) -> Omega=0.1 (expected WN ~0.1)
+# (0,1) -> Omega=0.2 (expected WN ~0.2)
+# (1,0) -> Omega=0.25 (expected WN ~0.25)
+# (1,1) -> Omega=0.5 (expected WN ~0.5, corresponds to 1/2 locking)
 OMEGA_MAP = {
-    (0,0): 0.1,
-    (0,1): 0.2,
-    (1,0): 0.25,
-    (1,1): 0.5
+    (0, 0): 0.1,
+    (0, 1): 0.2,
+    (1, 0): 0.25,
+    (1, 1): 0.5
 }
+
+# THRESHOLD_WN: Winding number threshold for the time-based AND gate.
+# If the calculated winding number for a given input pair is >= THRESHOLD_WN,
+# the gate outputs 1, otherwise 0. This value (0.4) is chosen to clearly
+# separate the expected winding number for (1,1) inputs (around 0.5) from
+# the winding numbers for other inputs (<=0.25).
+# IMPORTANT: The gate's correctness is sensitive to these Omega and Threshold values.
+# Small changes to K_PARAM or issues affecting numerical precision of winding numbers
+# could potentially shift winding numbers across this threshold.
 THRESHOLD_WN = 0.4
 
 # Copied from Stairs.py
 def circle_map_step(theta_current, Omega, K):
-    """Один шаг итерации круговой карты."""
+    """Performs one iteration of the circle map.
+
+    Args:
+        theta_current (float): Current phase of the system (typically in [0, 1)).
+        Omega (float): Base frequency parameter.
+        K (float): Coupling strength parameter.
+
+    Returns:
+        float: The next phase value of the system (in [0, 1)).
+    """
     theta_next = theta_current + Omega + (K / (2 * np.pi)) * np.sin(2 * np.pi * theta_current)
     return theta_next % 1 # Возвращаем остаток от деления на 1, чтобы фаза была [0, 1)
 
 # Copied and modified from Stairs.py
 def calculate_winding_number(Omega, K, num_iterations=200, transient=50):
-    """Вычисляет число вращения для заданных Omega и K."""
+    """Calculates the winding number for given Omega and K parameters.
+
+    The winding number is the average phase change per iteration of the circle map
+    after an initial transient period.
+
+    Args:
+        Omega (float): Base frequency parameter for the circle map.
+        K (float): Coupling strength parameter for the circle map.
+        num_iterations (int): Total number of iterations to simulate.
+        transient (int): Number of initial iterations to discard.
+
+    Returns:
+        float: The calculated winding number.
+
+    Raises:
+        ValueError: If num_iterations is not greater than transient.
+    """
+    if num_iterations <= transient:
+        raise ValueError("num_iterations must be greater than transient to calculate winding number")
+    
     theta = 0.5 # Начальная фаза
     total_phase_change = 0.0
     # theta_unwrapped = theta # Фаза без взятия по модулю 1, для отслеживания полных оборотов
@@ -42,55 +92,144 @@ def calculate_winding_number(Omega, K, num_iterations=200, transient=50):
 
 # Test function for the logical gate
 def test_logical_gate():
-    print("\\nRunning time_based_and_gate tests...")
-    # Define parameters locally for the test, mirroring the global ones or using specific test values
-    K_param_test = 1.0
-    omega_map_test = {
-        (0,0): 0.1, # Expected WN < 0.4 -> 0
-        (0,1): 0.2, # Expected WN < 0.4 -> 0
-        (1,0): 0.25, # Expected WN < 0.4 -> 0
-        (1,1): 0.5  # Expected WN > 0.4 -> 1
-    }
-    threshold_wn_test = 0.4
-    
     passed_all_tests = True
 
+    def assert_equal(actual, expected, message):
+        nonlocal passed_all_tests
+        print(f"Testing {message}... Expected: {expected}, Got: {actual}")
+        # Using np.array_equal for comparing numpy arrays, and direct equality for scalars
+        is_equal = False
+        if isinstance(actual, np.ndarray) and isinstance(expected, np.ndarray):
+            is_equal = np.array_equal(actual, expected)
+        elif not isinstance(actual, np.ndarray) and not isinstance(expected, np.ndarray):
+            is_equal = (actual == expected)
+        
+        assert is_equal, f"{message} - Test failed: Expected {expected}, Got {actual}"
+        if not is_equal:
+             passed_all_tests = False
+
+
+    print("\\nRunning time_based_and_gate tests...")
+    # Define parameters locally for the test, mirroring the global ones or using specific test values
+    K_param_test = 1.0 # This is K_PARAM from global scope, but good to have a local copy for clarity
+    omega_map_test = { # This is OMEGA_MAP from global scope
+        (0,0): 0.1, 
+        (0,1): 0.2, 
+        (1,0): 0.25, 
+        (1,1): 0.5  
+    }
+    threshold_wn_test = 0.4 # This is THRESHOLD_WN from global scope
+
     # Test case 1: (0,0) -> 0
-    result_00 = time_based_and_gate(0, 0, K_param_test, omega_map_test, threshold_wn_test)
-    print(f"Testing time_based_and_gate(0,0)... Expected: 0, Got: {result_00}")
-    assert result_00 == 0, f"Test failed for (0,0): Expected 0, Got {result_00}"
-    if result_00 != 0: passed_all_tests = False
+    actual_00 = time_based_and_gate(0, 0, K_param_test, omega_map_test, threshold_wn_test)
+    assert_equal(actual_00, 0, "time_based_and_gate(0,0)")
 
     # Test case 2: (0,1) -> 0
-    result_01 = time_based_and_gate(0, 1, K_param_test, omega_map_test, threshold_wn_test)
-    print(f"Testing time_based_and_gate(0,1)... Expected: 0, Got: {result_01}")
-    assert result_01 == 0, f"Test failed for (0,1): Expected 0, Got {result_01}"
-    if result_01 != 0: passed_all_tests = False
+    actual_01 = time_based_and_gate(0, 1, K_param_test, omega_map_test, threshold_wn_test)
+    assert_equal(actual_01, 0, "time_based_and_gate(0,1)")
 
     # Test case 3: (1,0) -> 0
-    result_10 = time_based_and_gate(1, 0, K_param_test, omega_map_test, threshold_wn_test)
-    print(f"Testing time_based_and_gate(1,0)... Expected: 0, Got: {result_10}")
-    assert result_10 == 0, f"Test failed for (1,0): Expected 0, Got {result_10}"
-    if result_10 != 0: passed_all_tests = False
+    actual_10 = time_based_and_gate(1, 0, K_param_test, omega_map_test, threshold_wn_test)
+    assert_equal(actual_10, 0, "time_based_and_gate(1,0)")
 
     # Test case 4: (1,1) -> 1
-    result_11 = time_based_and_gate(1, 1, K_param_test, omega_map_test, threshold_wn_test)
-    print(f"Testing time_based_and_gate(1,1)... Expected: 1, Got: {result_11}")
-    assert result_11 == 1, f"Test failed for (1,1): Expected 1, Got {result_11}"
-    if result_11 != 1: passed_all_tests = False
+    actual_11 = time_based_and_gate(1, 1, K_param_test, omega_map_test, threshold_wn_test)
+    assert_equal(actual_11, 1, "time_based_and_gate(1,1)")
+
+    print("\nTesting delay function...")
+    # Test case 1: Basic delay
+    x_delay_test1 = np.array([1, 2, 3, 4, 5])
+    dt_delay_test1 = 2
+    expected_delay1 = np.array([0, 0, 1, 2, 3])
+    actual_delay1 = delay(x_delay_test1.copy(), dt_delay_test1) # Use .copy() to avoid modifying original test array
+    assert_equal(actual_delay1, expected_delay1, "delay basic")
+
+    # Test case 2: Delay of 0
+    x_delay_test2 = np.array([1, 2, 3])
+    dt_delay_test2 = 0
+    expected_delay2 = np.array([1, 2, 3])
+    actual_delay2 = delay(x_delay_test2.copy(), dt_delay_test2)
+    assert_equal(actual_delay2, expected_delay2, "delay dt=0")
+
+    # Test case 3: Delay equal to length (all zeros)
+    x_delay_test3 = np.array([1, 2, 3])
+    dt_delay_test3 = 3
+    expected_delay3 = np.array([0, 0, 0])
+    actual_delay3 = delay(x_delay_test3.copy(), dt_delay_test3)
+    assert_equal(actual_delay3, expected_delay3, "delay dt=length")
+
+    # Test case 4: Delay greater than length (all zeros)
+    x_delay_test4 = np.array([1, 2])
+    dt_delay_test4 = 3
+    expected_delay4 = np.array([0, 0]) 
+    actual_delay4 = delay(x_delay_test4.copy(), dt_delay_test4)
+    assert_equal(actual_delay4, expected_delay4, "delay dt>length")
+
+    print("\nTesting seq function...")
+    # Test case 1: The example from main script (verbose=False for less console noise during test)
+    x_seq_test1 = np.array([1, 1, 1, 0, 1, 0])
+    y_seq_test1 = np.array([0, 0, 1, 1, 1, 0])
+    dt_seq_test1 = 1
+    expected_seq1 = np.array([0, 0, 0, 1, 0, 1])
+    actual_seq1 = seq(x_seq_test1, y_seq_test1, dt_seq_test1, verbose=False)
+    assert_equal(actual_seq1, expected_seq1, "seq example from main")
+
+    # Test case 2: seq with dt = 0
+    x_seq_test2 = np.array([1, 0, 1])
+    y_seq_test2 = np.array([1, 1, 0])
+    dt_seq_test2 = 0
+    expected_seq2 = np.array([1, 0, 0])
+    actual_seq2 = seq(x_seq_test2, y_seq_test2, dt_seq_test2, verbose=False)
+    assert_equal(actual_seq2, expected_seq2, "seq dt=0")
+
+    # Test case 3: seq with different values
+    x_seq_test3 = np.array([1, 1])
+    y_seq_test3 = np.array([1, 0])
+    dt_seq_test3 = 1
+    expected_seq3 = np.array([0, 1])
+    actual_seq3 = seq(x_seq_test3, y_seq_test3, dt_seq_test3, verbose=False)
+    assert_equal(actual_seq3, expected_seq3, "seq simple case with dt=1")
 
     if passed_all_tests:
-        print("All logic gate tests passed!")
+        print("\nAll tests passed!")
     else:
-        print("Some logic gate tests FAILED.")
+        print("\nSome tests FAILED.")
 
 # New time-based AND gate function
 def time_based_and_gate(input1, input2, K_param, omega_map, threshold_wn):
+    """Implements a time-based AND gate using circle map dynamics.
+
+    The logical output is determined by comparing the winding number, derived
+    from circle map simulations, against a threshold. The specific Omega
+    parameter for the circle map is chosen based on the binary inputs.
+
+    Args:
+        input1 (int): The first binary input (0 or 1).
+        input2 (int): The second binary input (0 or 1).
+        K_param (float): The K (coupling strength) parameter for the circle map.
+        omega_map (dict): A dictionary mapping input tuples (e.g., (0,1))
+                          to Omega parameters for the circle map.
+        threshold_wn (float): The winding number threshold used to determine
+                              the logical output (1 if >= threshold, else 0).
+
+    Returns:
+        int: The logical AND result (0 or 1).
+
+    Raises:
+        ValueError: If inputs are not valid binary integers.
+    """
+    if not isinstance(input1, (int, np.integer)) or input1 not in [0, 1]:
+        raise ValueError(f"input1 must be an integer 0 or 1, got {input1}")
+    if not isinstance(input2, (int, np.integer)) or input2 not in [0, 1]:
+        raise ValueError(f"input2 must be an integer 0 or 1, got {input2}")
+
     Omega = omega_map.get((input1, input2))
     if Omega is None:
         # Fallback or error for undefined input combinations
         # For now, let's assume it results in a 0 output if not found
-        return 0
+        # This case should ideally be handled by the omega_map definition
+        # or specific error handling if inputs are valid but not in map.
+        return 0 
     
     winding_number = calculate_winding_number(Omega, K_param)
     
@@ -101,12 +240,60 @@ def time_based_and_gate(input1, input2, K_param, omega_map, threshold_wn):
 
 # Функция задержки сигнала
 def delay(x, dt):
+    """Applies a delay to a signal (numpy array).
+
+    The signal is rolled by dt positions, and the first dt elements
+    of the rolled array are set to zero.
+
+    Args:
+        x (np.ndarray): The input signal (1D numpy array).
+        dt (int): The delay amount (number of positions to roll and zero out).
+
+    Returns:
+        np.ndarray: The delayed signal.
+    """
     x = np.roll(x, dt)
     x[:dt] = 0
     return x
 
 # Модифицированная операция венюнкция (sequential AND)
-def seq(x, y, dt):
+def seq(x, y, dt, verbose=False):
+    """Applies a time-based AND gate element-wise to two input sequences
+    after applying a specified delay to them.
+
+    Args:
+        x (array-like): The first input sequence of binary values (0 or 1).
+        y (array-like): The second input sequence of binary values (0 or 1).
+                        Must be the same length as x.
+        dt (int): The non-negative integer delay to apply to x and y before
+                  processing.
+        verbose (bool, optional): If True, prints a summary of whether the
+                                  entire resulting sequence is all ones.
+                                  Defaults to False.
+
+    Returns:
+        np.ndarray: A numpy array containing the element-wise AND results
+                    after delay.
+
+    Raises:
+        ValueError: If dt is negative, or if x and y have different lengths
+                    or are not 1-dimensional.
+    """
+    if not isinstance(dt, int) or dt < 0:
+        raise ValueError("Delay dt must be a non-negative integer")
+
+    # Convert inputs to numpy arrays to ensure compatibility
+    x = np.asarray(x)
+    y = np.asarray(y)
+
+    if x.ndim != 1 or y.ndim != 1:
+        raise ValueError("Input arrays x and y must be 1-dimensional")
+
+    if len(x) != len(y):
+        raise ValueError("Input arrays x and y must have the same length")
+    
+    gate_cache = {} # Initialize cache for time_based_and_gate results
+        
     # Задержка сигналов
     x_dt = delay(x, dt)
     y_dt = delay(y, dt)
@@ -114,22 +301,26 @@ def seq(x, y, dt):
     # Вычисление выхода
     result = np.zeros_like(x)
 
-    for i in range(len(x)):
-        result[i] = time_based_and_gate(x_dt[i], y_dt[i], K_PARAM, OMEGA_MAP, THRESHOLD_WN)
+    for i in range(len(x)): # Iterate based on original length of x
+        current_pair = (x_dt[i], y_dt[i])
+        if current_pair not in gate_cache:
+            gate_cache[current_pair] = time_based_and_gate(
+                current_pair[0], current_pair[1],
+                K_PARAM, OMEGA_MAP, THRESHOLD_WN
+            )
+        result[i] = gate_cache[current_pair]
 
-    # This part of the original code printed a summary, 
-    # which might not be directly relevant for each call to seq if it's used as a component.
-    # For now, let's keep it to see the overall effect on the example.
-    if np.all(result == 1):
-        print("x & y = 1 (based on time_based_and_gate for the entire sequence)")
-    else:
-        # This will print if any element in the result is 0
-        print("x & y != 1 (at least one element is 0 in the time_based_and_gate sequence)")
+    if verbose:
+        if np.all(result == 1):
+            print("x & y = 1 (based on time_based_and_gate for the entire sequence)")
+        else:
+            # This will print if any element in the result is 0
+            print("x & y != 1 (at least one element is 0 in the time_based_and_gate sequence)")
 
     return result
 
 # Пример использования
-print(seq(np.array([1, 1, 1, 0, 1, 0]), np.array([0, 0, 1, 1, 1, 0]), 1))
+print(seq(np.array([1, 1, 1, 0, 1, 0]), np.array([0, 0, 1, 1, 1, 0]), 1, verbose=True))
 
 # Run tests
 test_logical_gate()
